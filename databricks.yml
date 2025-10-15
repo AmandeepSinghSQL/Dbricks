@@ -1,0 +1,40 @@
+# This is a Databricks asset bundle definition for DBX_Test.
+# The Databricks extension requires databricks.yml configuration file.
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+
+bundle:
+  name: DBX_Test
+
+# Define resources to deploy
+resources:
+  jobs:
+    daily_pipeline_job:
+      name: "Daily Data Pipeline - ${bundle.target}"
+      tasks:
+        - task_key: run_pipeline
+          notebook_task:
+            notebook_path: ./notebooks/data_pipeline.py
+            source: WORKSPACE
+            base_parameters:
+              bundle.target: ${bundle.target}
+          existing_cluster_id: "1014-215524-khmm4hfe"
+
+# Sync notebooks to workspace
+sync:
+  include:
+    - "notebooks/*"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-6909468084062887.7.azuredatabricks.net
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+  ## Optionally, there could be 'staging' or 'prod' targets here.
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-6909468084062887.7.azuredatabricks.net
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
