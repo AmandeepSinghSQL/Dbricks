@@ -272,14 +272,19 @@ def silver_claims_enriched():
     
     This demonstrates custom business logic beyond simple metadata-driven tables
     """
-    claims = dlt.read_stream("bronze_claims_837")
-    payments = dlt.read_stream("bronze_claims_835")
+    # Stream-stream left outer join with event-time watermarks and bounded time range
+    claims = dlt.read_stream("bronze_claims_837").withWatermark("_ingestion_timestamp", "7 days").alias("c")
+    payments = dlt.read_stream("bronze_claims_835").withWatermark("_ingestion_timestamp", "7 days").alias("p")
+
+    time_bound = (
+        (col("c._ingestion_timestamp") >= (col("p._ingestion_timestamp") - expr("INTERVAL 7 DAYS"))) &
+        (col("c._ingestion_timestamp") <= (col("p._ingestion_timestamp") + expr("INTERVAL 7 DAYS")))
+    )
     
-    # Join on claim_id
-    enriched = claims.alias("c").join(
-        payments.alias("p"),
-        col("c.claim_id") == col("p.claim_id"),
-        "left"
+    enriched = claims.join(
+        payments,
+        (col("c.claim_id") == col("p.claim_id")) & time_bound,
+        "leftOuter"
     ).select(
         col("c.claim_id"),
         col("c.service_date"),
