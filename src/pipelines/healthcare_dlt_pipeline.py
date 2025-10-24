@@ -1,14 +1,14 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Healthcare Data Pipeline - Runtime Table Generator
-# MAGIC 
+# MAGIC
 # MAGIC **This notebook generates DLT tables at runtime using exec() and metadata**
-# MAGIC 
+# MAGIC
 # MAGIC ### Key Features:
 # MAGIC - **Metadata-driven:** Reads from Unity Catalog metadata table
 # MAGIC - **Runtime generation:** Creates DLT tables dynamically using exec()
 # MAGIC - **Healthcare compliance:** Built-in PHI masking and quality standards
-# MAGIC 
+
 # COMMAND ----------
 
 import dlt
@@ -147,9 +147,9 @@ def create_gold_table(table_name, key_columns):
 
 # MAGIC %md
 # MAGIC ## Generate All Tables at Runtime (Metadata-Driven!)
-# MAGIC 
+# MAGIC
 # MAGIC **Tables are generated dynamically from Unity Catalog metadata**
-# MAGIC 
+# MAGIC
 # MAGIC This approach:
 # MAGIC - Reads from healthcare.metadata.file_metadata
 # MAGIC - Creates Bronze, Silver, Gold tables for each enabled file type
@@ -354,30 +354,38 @@ print(f"📋 Generated tables for {metadata_df.count()} file types")
     }
 )
 def gold_provider_performance_unoptimized():
-    """
-    INTENTIONALLY UNOPTIMIZED for demo purposes
-    - Skewed join on provider_id_masked (one provider has 80% of data)
-    - No optimization hints
-    - Shows high shuffle costs in Spark UI
-    
-    Problem: One provider (provider_123) has 80% of claims
-    Result: Slow execution, expensive shuffle, single task bottleneck
-    """
-    claims = dlt.read("silver_claims_837")
-    payments = dlt.read("silver_claims_835")
-    
-    # Join WITHOUT optimization (will be skewed)
-    joined = claims.join(payments, "claim_id", "inner")
-    
-    # Aggregate by provider (skewed - one provider has 80% of data)
-    provider_stats = joined.groupBy("provider_id_masked").agg(
-        count("*").alias("total_claims"),
-        sum("billed_amount").alias("total_billed"),
-        sum("payment_amount").alias("total_paid"),
-        avg(datediff(col("payment_date"), col("service_date"))).alias("avg_payment_days"),
-        (sum("payment_amount") / sum("billed_amount") * 100).alias("payment_rate_pct")
+    from pyspark.sql.functions import col, count, sum, avg, datediff, current_timestamp
+
+    claims = (
+        dlt.read("silver_claims_837")
+        .withColumnRenamed("provider_id_masked", "claims_provider_id_masked")
+        .withColumnRenamed("billed_amount", "claims_billed_amount")
+        .withColumnRenamed("service_date", "claims_service_date")
     )
-    
+    payments = (
+        dlt.read("silver_claims_835")
+        .withColumnRenamed("provider_id_masked", "payments_provider_id_masked")
+        .withColumnRenamed("payment_amount", "payments_payment_amount")
+        .withColumnRenamed("payment_date", "payments_payment_date")
+    )
+
+    # Reference columns by string name, not DataFrame alias
+    joined = claims.join(
+        payments,
+        (col("claim_id") == col("claim_id")),
+        "inner"
+    )
+
+    provider_stats = joined.groupBy(
+        "payments_provider_id_masked"
+    ).agg(
+        count("*").alias("total_claims"),
+        sum("claims_billed_amount").alias("total_billed"),
+        sum("payments_payment_amount").alias("total_paid"),
+        avg(datediff(col("payments_payment_date"), col("claims_service_date"))).alias("avg_payment_days"),
+        (sum("payments_payment_amount") / sum("claims_billed_amount") * 100).alias("payment_rate_pct")
+    )
+
     return provider_stats.withColumn("_gold_timestamp", current_timestamp())
 
 # COMMAND ----------
@@ -453,7 +461,7 @@ def gold_provider_performance_optimized():
 
 # MAGIC %md
 # MAGIC ## Static DLT Table Definitions (BACKUP - Can be deleted if loop works)
-# MAGIC 
+# MAGIC
 # MAGIC *These are kept as backup in case the loop approach has issues*
 # MAGIC *If the metadata-driven loop above works, DELETE this entire section!*
 
@@ -730,30 +738,30 @@ def demo_volume_monitoring():
 
 # MAGIC %md
 # MAGIC ### ✅ Runtime Generation Industry Standards Implemented:
-# MAGIC 
+# MAGIC
 # MAGIC **Configuration Management:**
 # MAGIC - ✅ Unity Catalog metadata table
 # MAGIC - ✅ Runtime table generation
 # MAGIC - ✅ Zero code changes to enable/disable files
 # MAGIC - ✅ Scalable to 500+ file types
-# MAGIC 
+# MAGIC
 # MAGIC **Data Processing:**
 # MAGIC - ✅ Bronze: Autoloader with schema evolution
 # MAGIC - ✅ Silver: Dynamic deduplication and PHI masking
 # MAGIC - ✅ Gold: Business metrics and analytics
 # MAGIC - ✅ Quality validation based on metadata
-# MAGIC 
+# MAGIC
 # MAGIC **Monitoring & Alerting:**
 # MAGIC - ✅ Volume anomaly detection per file type
 # MAGIC - ✅ Proactive stakeholder alerts
 # MAGIC - ✅ Complete audit trails
-# MAGIC 
+# MAGIC
 # MAGIC **Healthcare Compliance:**
 # MAGIC - ✅ HIPAA compliance with PHI protection
 # MAGIC - ✅ 7-year data retention policies
 # MAGIC - ✅ Complete audit trails and lineage
 # MAGIC - ✅ Quality standards (99.5%+)
-# MAGIC 
+# MAGIC
 # MAGIC **Enterprise Scalability:**
 # MAGIC - ✅ Runtime table generation
 # MAGIC - ✅ Zero code changes for new files
