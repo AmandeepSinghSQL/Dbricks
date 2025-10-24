@@ -1,21 +1,64 @@
-# =====================================================
-# Create Test Healthcare Files for ADLS Demo
-# =====================================================
-# This script creates sample healthcare files that match the metadata configuration
-# Run this in Databricks after mounting ADLS
+"""
+Create timestamped test files in abfss external locations (no mounts required).
+
+Usage: Run in a Databricks notebook attached to a cluster with access to the
+Unity Catalog storage credential/external locations backing these paths.
+
+Target layout (under the 'rawdata' container):
+  healthcare/payer/claims/claims_837_<ts>.csv         (CSV with |)
+  healthcare/payer/payments/claims_835_<ts>.csv       (CSV with |)
+  healthcare/clinical/hl7/hl7_<ts>.json               (JSON lines)
+  healthcare/clinical/lab/lab_<ts>.parquet            (Parquet)
+  healthcare/eligibility/verification/eligibility_<ts>.csv (CSV ,)
+
+Notes:
+- Files are written with a unique timestamp in the name to guarantee discovery
+  by Auto Loader when cloudFiles.includeExistingFiles=false.
+- We use Spark writers to write a single file (coalesce(1)) into a temp folder,
+  then move the produced part file to the final desired filename.
+"""
 
 import pandas as pd
 from datetime import datetime, timedelta
 import random
-import json
 
 # Set random seed for reproducible data
 random.seed(42)
 
+def _single_file_write(spark_df, target_file_path: str, fmt: str, options: dict | None = None) -> None:
+    """Write a Spark DataFrame as a single file to target_file_path.
+    We write to a temporary directory, then move the generated part-* file
+    to the requested final filename.
+    """
+    tmp_dir = target_file_path + "_tmp_write"
+    writer = spark_df.coalesce(1).write.mode("overwrite")
+    if options:
+        for k, v in options.items():
+            writer = writer.option(k, v)
+    if fmt == "csv":
+        writer.csv(tmp_dir)
+    elif fmt == "json":
+        writer.json(tmp_dir)
+    elif fmt == "parquet":
+        writer.parquet(tmp_dir)
+    else:
+        raise ValueError(f"Unsupported format: {fmt}")
+
+    part_files = [f.path for f in dbutils.fs.ls(tmp_dir) if f.name.startswith("part-")]
+    if not part_files:
+        raise RuntimeError(f"No part files written in {tmp_dir}")
+    dbutils.fs.cp(part_files[0], target_file_path)
+    dbutils.fs.rm(tmp_dir, True)
+
+def _abfss_base(account_name: str | None = None) -> str:
+    # Allow override via Spark conf `healthcare.testdata.storage.account`
+    account = account_name or spark.conf.get("healthcare.testdata.storage.account", "ucdatabricksstorage")
+    return f"abfss://rawdata@{account}.dfs.core.windows.net/healthcare"
+
 # =====================================================
 # 1. CLAIMS 837 (EDI Format) - CSV with | delimiter
 # =====================================================
-def create_claims_837_data(n_records=1000):
+def create_claims_837_data(n_records: int = 1000):
     """
     Create sample claims 837 data (EDI format)
     
@@ -61,7 +104,7 @@ def create_claims_837_data(n_records=1000):
 # =====================================================
 # 2. CLAIMS 835 (Payment Format) - CSV with | delimiter
 # =====================================================
-def create_claims_835_data(n_records=800):
+def create_claims_835_data(n_records: int = 800):
     """
     Create sample claims 835 payment data
     
@@ -167,96 +210,93 @@ def create_lab_results_data():
 # =====================================================
 # MAIN EXECUTION - Create and Save Files
 # =====================================================
-def create_all_test_files():
-    """Create all test files and save to ADLS"""
-    
-    print("Creating test healthcare files...")
-    
-    # 1. Claims 837 - CSV with | delimiter
-    print("Creating claims_837 files...")
+def create_all_test_files(account_name: str | None = None, days_back: int = 0):
+    """Create fresh timestamped files directly in abfss external locations.
+
+    Parameters
+    - account_name: Storage account backing the 'rawdata' container. If None,
+      uses Spark conf `healthcare.testdata.storage.account` or 'ucdatabricksstorage'.
+    - days_back: shift the timestamp back N days (for testing watermark ranges)
+    """
+
+    base = _abfss_base(account_name)
+
+    print("Creating test healthcare files in:", base)
+
+    ts = (datetime.now() - timedelta(days=days_back)).strftime('%Y%m%d_%H%M%S')
+
+    # 1) Claims 837 - CSV with | delimiter
     claims_837_df = create_claims_837_data()
-    
-    # Create multiple files to simulate daily ingestion
-    for day in range(3):
-        file_date = (datetime.now() - timedelta(days=day)).strftime('%Y%m%d')
-        filename = f"/mnt/ucdatabricksstorage/rawdata/payer/claims/claims_837_{file_date}.csv"
-        
-        # Save with | delimiter
-        claims_837_df.to_csv(filename, sep='|', index=False)
-        print(f"Created: {filename}")
-    
-    # 2. Claims 835 - CSV with | delimiter
-    print("Creating claims_835 files...")
+    claims_837_path = f"{base}/payer/claims/claims_837_{ts}.csv"
+    _single_file_write(
+        spark.createDataFrame(claims_837_df),
+        claims_837_path,
+        fmt="csv",
+        options={"header": "true", "delimiter": "|"}
+    )
+    print(f"Created: {claims_837_path}")
+
+    # 2) Claims 835 - CSV with | delimiter
     claims_835_df = create_claims_835_data()
-    
-    for day in range(2):
-        file_date = (datetime.now() - timedelta(days=day)).strftime('%Y%m%d')
-        filename = f"/mnt/ucdatabricksstorage/rawdata/payer/payments/claims_835_{file_date}.csv"
-        
-        claims_835_df.to_csv(filename, sep='|', index=False)
-        print(f"Created: {filename}")
-    
-    # 3. HL7 Messages - JSON format
-    print("Creating hl7_messages files...")
+    claims_835_path = f"{base}/payer/payments/claims_835_{ts}.csv"
+    _single_file_write(
+        spark.createDataFrame(claims_835_df),
+        claims_835_path,
+        fmt="csv",
+        options={"header": "true", "delimiter": "|"}
+    )
+    print(f"Created: {claims_835_path}")
+
+    # 3) HL7 messages - JSON lines
     hl7_df = create_hl7_messages_data()
-    
-    for day in range(4):
-        file_date = (datetime.now() - timedelta(days=day)).strftime('%Y%m%d')
-        filename = f"/mnt/ucdatabricksstorage/rawdata/clinical/hl7/hl7_{file_date}.json"
-        
-        # Save as JSON
-        hl7_df.to_json(filename, orient='records', lines=True)
-        print(f"Created: {filename}")
-    
-    # 4. Eligibility Verification - CSV with , delimiter
-    print("Creating eligibility_verification files...")
+    hl7_path = f"{base}/clinical/hl7/hl7_{ts}.json"
+    _single_file_write(
+        spark.createDataFrame(hl7_df),
+        hl7_path,
+        fmt="json",
+        options=None
+    )
+    print(f"Created: {hl7_path}")
+
+    # 4) Eligibility - CSV with , delimiter
     eligibility_df = create_eligibility_data()
-    
-    for day in range(2):
-        file_date = (datetime.now() - timedelta(days=day)).strftime('%Y%m%d')
-        filename = f"/mnt/ucdatabricksstorage/rawdata/eligibility/verification/eligibility_{file_date}.csv"
-        
-        eligibility_df.to_csv(filename, sep=',', index=False)
-        print(f"Created: {filename}")
-    
-    # 5. Lab Results - Parquet format
-    print("Creating lab_results files...")
+    eligibility_path = f"{base}/eligibility/verification/eligibility_{ts}.csv"
+    _single_file_write(
+        spark.createDataFrame(eligibility_df),
+        eligibility_path,
+        fmt="csv",
+        options={"header": "true", "delimiter": ","}
+    )
+    print(f"Created: {eligibility_path}")
+
+    # 5) Lab Results - Parquet
     lab_df = create_lab_results_data()
-    
-    for day in range(3):
-        file_date = (datetime.now() - timedelta(days=day)).strftime('%Y%m%d')
-        filename = f"/mnt/ucdatabricksstorage/rawdata/clinical/lab/lab_{file_date}.parquet"
-        
-        # Save as Parquet
-        lab_df.to_parquet(filename, index=False)
-        print(f"Created: {filename}")
-    
+    lab_path = f"{base}/clinical/lab/lab_{ts}.parquet"
+    _single_file_write(
+        spark.createDataFrame(lab_df),
+        lab_path,
+        fmt="parquet",
+        options=None
+    )
+    print(f"Created: {lab_path}")
+
     print("\n✅ All test files created successfully!")
-    print("\nFile structure created:")
-    print("📁 /mnt/ucdatabricksstorage/rawdata/")
-    print("  📁 payer/")
-    print("    📁 claims/ → claims_837_*.csv (3 files)")
-    print("    📁 payments/ → claims_835_*.csv (2 files)")
-    print("  📁 clinical/")
-    print("    📁 hl7/ → hl7_*.json (4 files)")
-    print("    📁 lab/ → lab_*.parquet (3 files)")
-    print("  📁 eligibility/")
-    print("    📁 verification/ → eligibility_*.csv (2 files)")
 
 # =====================================================
 # VERIFICATION FUNCTIONS
 # =====================================================
-def verify_files_created():
+def verify_files_created(account_name: str | None = None):
     """Verify all files were created successfully"""
     print("\n🔍 Verifying created files...")
     
     # Check each directory
+    base = _abfss_base(account_name)
     directories = [
-        "/mnt/ucdatabricksstorage/rawdata/payer/claims/",
-        "/mnt/ucdatabricksstorage/rawdata/payer/payments/",
-        "/mnt/ucdatabricksstorage/rawdata/clinical/hl7/",
-        "/mnt/ucdatabricksstorage/rawdata/clinical/lab/",
-        "/mnt/ucdatabricksstorage/rawdata/eligibility/verification/"
+        f"{base}/payer/claims/",
+        f"{base}/payer/payments/",
+        f"{base}/clinical/hl7/",
+        f"{base}/clinical/lab/",
+        f"{base}/eligibility/verification/"
     ]
     
     for directory in directories:
@@ -272,11 +312,11 @@ def verify_files_created():
 # RUN THE SCRIPT
 # =====================================================
 if __name__ == "__main__":
-    # Create all test files
+    # Create all test files using default storage account (override via spark conf)
     create_all_test_files()
-    
+
     # Verify files were created
     verify_files_created()
-    
+
     print("\n🎯 Ready for your metadata-driven DLT demo!")
     print("Files match the metadata configuration in healthcare.metadata.file_metadata")
