@@ -80,6 +80,7 @@ def create_bronze_table(table_name, domain, source_path, file_pattern, file_form
     
     if file_format == "csv" and delimiter:
         reader = reader.option("delimiter", delimiter)
+        reader = reader.option("header", "true")
     
     # Load data and apply file filtering after loading
     df = reader.load(source_path)
