@@ -1,0 +1,131 @@
+# Databricks Asset Bundle Configuration
+# Healthcare Data Platform - Metadata-Driven DLT Pipeline
+
+bundle:
+  name: healthcare_data_platform
+
+include:
+  - resources/*.yml
+
+# Workspace configuration
+workspace:
+  host: https://adb-6909468084062887.7.azuredatabricks.net
+
+# Define deployment targets
+targets:
+  # Development environment
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-6909468084062887.7.azuredatabricks.net
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    
+  # Production environment
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-6909468084062887.7.azuredatabricks.net
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    # Require explicit approval for production deployments
+    run_as:
+      service_principal_name: ${var.prod_service_principal}
+
+# Resources - DLT Pipeline
+resources:
+  pipelines:
+    healthcare_dlt_pipeline:
+      name: healthcare_data_platform_${bundle.target}
+      
+      # Pipeline configuration
+      target: default
+      catalog: healthcare
+      
+      # Use serverless compute for cost efficiency
+      serverless: true
+      channel: CURRENT
+      
+      # Pipeline mode - triggered (not continuous)
+      continuous: false
+      development: true
+      
+      # Source code location
+      libraries:
+        - notebook:
+            path: ./src/pipelines/healthcare_dlt_pipeline.py
+      
+      # Pipeline configuration
+      configuration:
+        # ADLS storage path
+        source.payer.claims: abfss://rawdata@ucdatabricksstorage.dfs.core.windows.net/healthcare/payer/claims
+        source.clinical.hl7: abfss://rawdata@ucdatabricksstorage.dfs.core.windows.net/healthcare/clinical/hl7/
+        
+        # Metadata table location
+        metadata.table: healthcare.metadata.file_metadata
+        
+        # Schema hints location for Auto Loader
+        schema.location: /tmp/schemas
+      
+      # Permissions (optional, adjust as needed)
+      permissions:
+        - level: CAN_VIEW
+          group_name: users
+
+  # Optional: Job to run the pipeline on schedule
+  jobs:
+    healthcare_pipeline_scheduled:
+      name: healthcare_pipeline_scheduled_${bundle.target}
+      
+      tasks:
+        - task_key: run_dlt_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.healthcare_dlt_pipeline.id}
+      
+      # Schedule: Run daily at 2 AM UTC
+      schedule:
+        quartz_cron_expression: "0 0 2 * * ?"
+        timezone_id: "UTC"
+      
+      # Email notifications on failure
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+
+# Variables (can be overridden per target)
+variables:
+  catalog_name:
+    description: Unity Catalog name
+    default: healthcare
+  
+  schema_name:
+    description: Target schema name
+    default: default
+  
+  prod_service_principal:
+    description: Service principal for production deployments
+    default: ""
+
+# Sync configuration - what files to include/exclude
+sync:
+  include:
+    - src/**
+    - tests/**
+    - setup/**
+    - docs/**
+    - notebooks/**
+    - presentation/**
+  
+  exclude:
+    - __pycache__/**
+    - "*.pyc"
+    - .git/**
+    - .pytest_cache/**
+    - "*.log"
+
+# Artifacts - additional files to sync
+artifacts:
+  schemas:
+    path: ./src/schemas/
+    type: whl
+
+

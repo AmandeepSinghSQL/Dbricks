@@ -354,36 +354,32 @@ print(f"📋 Generated tables for {metadata_df.count()} file types")
     }
 )
 def gold_provider_performance_unoptimized():
-    from pyspark.sql.functions import col, count, sum, avg, datediff, current_timestamp
+    # Read silver tables and alias for disambiguation
+    claims = dlt.read("silver_claims_837").alias("c")
+    payments = dlt.read("silver_claims_835").alias("p")
 
-    claims = (
-        dlt.read("silver_claims_837")
-        .withColumnRenamed("provider_id_masked", "claims_provider_id_masked")
-        .withColumnRenamed("billed_amount", "claims_billed_amount")
-        .withColumnRenamed("service_date", "claims_service_date")
-    )
-    payments = (
-        dlt.read("silver_claims_835")
-        .withColumnRenamed("provider_id_masked", "payments_provider_id_masked")
-        .withColumnRenamed("payment_amount", "payments_payment_amount")
-        .withColumnRenamed("payment_date", "payments_payment_date")
-    )
-
-    # Reference columns by string name, not DataFrame alias
+    # Join on explicit, qualified columns to avoid ambiguity
     joined = claims.join(
         payments,
-        (col("claim_id") == col("claim_id")),
+        col("c.claim_id") == col("p.claim_id"),
         "inner"
     )
 
-    provider_stats = joined.groupBy(
-        "payments_provider_id_masked"
-    ).agg(
+    # Select only the needed fields with clear names, then aggregate
+    projected = joined.select(
+        col("c.provider_id_masked").alias("provider_id_masked"),
+        col("c.billed_amount").alias("billed_amount"),
+        col("p.payment_amount").alias("payment_amount"),
+        col("p.payment_date").alias("payment_date"),
+        col("c.service_date").alias("service_date")
+    )
+
+    provider_stats = projected.groupBy("provider_id_masked").agg(
         count("*").alias("total_claims"),
-        sum("claims_billed_amount").alias("total_billed"),
-        sum("payments_payment_amount").alias("total_paid"),
-        avg(datediff(col("payments_payment_date"), col("claims_service_date"))).alias("avg_payment_days"),
-        (sum("payments_payment_amount") / sum("claims_billed_amount") * 100).alias("payment_rate_pct")
+        sum("billed_amount").alias("total_billed"),
+        sum("payment_amount").alias("total_paid"),
+        avg(datediff(col("payment_date"), col("service_date"))).alias("avg_payment_days"),
+        (sum("payment_amount") / sum("billed_amount") * 100).alias("payment_rate_pct")
     )
 
     return provider_stats.withColumn("_gold_timestamp", current_timestamp())
@@ -422,37 +418,33 @@ def gold_provider_performance_optimized():
     "When volume increased 15% but cost went up 40%, I found skewed joins.
     Applied salting and broadcast hints. Result: 60% faster, cost back to baseline."
     """
-    claims = dlt.read("silver_claims_837")
-    payments = dlt.read("silver_claims_835")
-    
-    # Add salt to handle skew (0-9 gives 10x parallelism for skewed provider)
-    claims_salted = claims.withColumn("_salt", (rand() * 10).cast("int"))
-    payments_salted = payments.withColumn("_salt", (rand() * 10).cast("int"))
-    
-    # Join with salt + broadcast hint for smaller table
-    # Note: broadcast() may be skipped if table is too large, Spark decides
+    # Read silver tables and add salt, then alias for qualified refs
+    claims_salted = dlt.read("silver_claims_837").withColumn("_salt", (rand() * 10).cast("int")).alias("c")
+    payments_salted = dlt.read("silver_claims_835").withColumn("_salt", (rand() * 10).cast("int")).alias("p")
+
+    # Join with salt + broadcast; qualify columns explicitly
     joined = claims_salted.join(
-        broadcast(payments_salted),
-        (col("claims_salted.claim_id") == col("payments_salted.claim_id")) & 
-        (col("claims_salted._salt") == col("payments_salted._salt")),
+        broadcast(payments_salted).alias("p"),
+        (col("c.claim_id") == col("p.claim_id")) & (col("c._salt") == col("p._salt")),
         "inner"
-    ).select(
-        col("claims_salted.provider_id_masked"),
-        col("claims_salted.billed_amount"),
-        col("payments_salted.payment_amount"),
-        col("payments_salted.payment_date"),
-        col("claims_salted.service_date")
     )
-    
-    # Aggregate by provider
-    provider_stats = joined.groupBy("provider_id_masked").agg(
+
+    projected = joined.select(
+        col("c.provider_id_masked").alias("provider_id_masked"),
+        col("c.billed_amount").alias("billed_amount"),
+        col("p.payment_amount").alias("payment_amount"),
+        col("p.payment_date").alias("payment_date"),
+        col("c.service_date").alias("service_date")
+    )
+
+    provider_stats = projected.groupBy("provider_id_masked").agg(
         count("*").alias("total_claims"),
         sum("billed_amount").alias("total_billed"),
         sum("payment_amount").alias("total_paid"),
         avg(datediff(col("payment_date"), col("service_date"))).alias("avg_payment_days"),
         (sum("payment_amount") / sum("billed_amount") * 100).alias("payment_rate_pct")
     ).orderBy(col("total_claims").desc())
-    
+
     return provider_stats \
         .withColumn("_gold_timestamp", current_timestamp()) \
         .withColumn("_optimization_applied", lit("salting_broadcast"))
