@@ -51,8 +51,14 @@ def _single_file_write(spark_df, target_file_path: str, fmt: str, options: dict 
     dbutils.fs.rm(tmp_dir, True)
 
 def _abfss_base(account_name: str | None = None) -> str:
-    # Allow override via Spark conf `healthcare.testdata.storage.account`
-    account = account_name or spark.conf.get("healthcare.testdata.storage.account", "ucdatabricksstorage")
+    # Allow override via Spark conf `healthcare.testdata.storage.account`.
+    # Some runtimes throw if the key is missing; fall back safely.
+    conf_account = None
+    try:
+        conf_account = spark.conf.get("healthcare.testdata.storage.account")  # may raise if not set
+    except Exception:
+        conf_account = None
+    account = account_name or conf_account or "ucdatabricksstorage"
     return f"abfss://rawdata@{account}.dfs.core.windows.net/healthcare"
 
 # =====================================================
