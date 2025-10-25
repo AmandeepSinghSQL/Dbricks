@@ -504,8 +504,12 @@ def gold_provider_performance_optimized():
 
 @dlt.table(
     name="monitoring_bronze_volumes",
-    comment="Real-time volume monitoring - triggers alerts immediately after Bronze ingestion"
+    comment="Real-time volume monitoring - triggers alerts immediately after Bronze ingestion",
+    table_properties={
+        "pipelines.reset.allowed": "false"
+    }
 )
+@dlt.append_flow
 def monitoring_bronze_volumes():
     """
     Monitor Bronze table volumes in real-time and detect anomalies.
@@ -610,8 +614,12 @@ def monitoring_bronze_volumes():
 
 @dlt.table(
     name="monitoring_data_quality",
-    comment="Real-time quality monitoring - compares Bronze vs Silver record counts"
+    comment="Real-time quality monitoring - compares Bronze vs Silver record counts",
+    table_properties={
+        "pipelines.reset.allowed": "false"
+    }
 )
+@dlt.append_flow
 def monitoring_data_quality():
     """
     Monitor data quality by comparing Bronze vs Silver counts.
