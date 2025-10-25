@@ -1,9 +1,9 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Healthcare Test Data Generator
-# MAGIC 
+# MAGIC
 # MAGIC **Creates timestamped test files in abfss external locations**
-# MAGIC 
+# MAGIC
 # MAGIC Run this notebook anytime to generate new files that Auto Loader will ingest.
 
 # COMMAND ----------
@@ -56,7 +56,7 @@ def _abfss_base(account_name: str = None) -> str:
 
 # COMMAND ----------
 
-def create_claims_837_data(n_records: int = 1000):
+def create_claims_837_data(n_records: int = 10000):
     """
     Create sample claims 837 data (EDI format)
     
