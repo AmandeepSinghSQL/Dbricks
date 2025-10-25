@@ -526,7 +526,9 @@ def monitoring_bronze_volumes():
         )
     
     # Union all volumes
-    all_volumes = volumes[0].unionAll(*volumes[1:]) if len(volumes) > 1 else volumes[0]
+    all_volumes = volumes[0]
+    for v in volumes[1:]:
+        all_volumes = all_volumes.unionAll(v)
     
     # Calculate rolling statistics for anomaly detection
     window_spec = Window.partitionBy("table_name").orderBy("ingestion_hour").rowsBetween(-168, -1)  # Last 7 days (hourly)
@@ -621,7 +623,9 @@ def monitoring_data_quality():
     if not quality_checks:
         return spark.createDataFrame([], "table_name string, bronze_records long, silver_records long, dropped_records long, quality_score_pct double, check_timestamp timestamp")
     
-    all_checks = quality_checks[0].unionAll(*quality_checks[1:]) if len(quality_checks) > 1 else quality_checks[0]
+    all_checks = quality_checks[0]
+    for check in quality_checks[1:]:
+        all_checks = all_checks.unionAll(check)
     
     monitored = all_checks.withColumn(
         "severity",
