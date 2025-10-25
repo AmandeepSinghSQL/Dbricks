@@ -502,9 +502,13 @@ def gold_provider_performance_optimized():
 
 # COMMAND ----------
 
-@dlt.append_flow(
-    target="monitoring_bronze_volumes",
-    comment="Real-time volume monitoring - triggers alerts immediately after Bronze ingestion"
+@dlt.table(
+    name="monitoring_bronze_volumes",
+    comment="Real-time volume monitoring - triggers alerts immediately after Bronze ingestion",
+    table_properties={
+        "quality": "monitoring",
+        "delta.appendOnly": "true"
+    }
 )
 def monitoring_bronze_volumes():
     """
@@ -608,9 +612,13 @@ def monitoring_bronze_volumes():
 
 # COMMAND ----------
 
-@dlt.append_flow(
-    target="monitoring_data_quality",
-    comment="Real-time quality monitoring - compares Bronze vs Silver record counts"
+@dlt.table(
+    name="monitoring_data_quality",
+    comment="Real-time quality monitoring - compares Bronze vs Silver record counts",
+    table_properties={
+        "quality": "monitoring",
+        "delta.appendOnly": "true"
+    }
 )
 def monitoring_data_quality():
     """
