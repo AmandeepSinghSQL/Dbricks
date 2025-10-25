@@ -617,49 +617,27 @@ def monitoring_data_quality():
     Monitor data quality by comparing Bronze vs Silver counts.
     Dropped records = Bronze - Silver
     
-    Note: This uses spark.table() instead of dlt.read() to get actual counts
-    from the Unity Catalog tables.
+    Uses dlt.read() for automatic dependency management during pipeline execution.
     """
-    metadata_df = get_file_metadata()
-    quality_checks = []
+    # Read claims_837 specifically to show quality drops
+    bronze_claims = dlt.read("bronze_claims_837")
+    silver_claims_quality = dlt.read("silver_claims_837_with_quality")
     
-    for row in metadata_df.collect():
-        table_name = row.table_name
-        bronze_table_name = f"healthcare.default.bronze_{table_name}"
-        
-        # For claims_837, compare to quality table; others use regular silver
-        if table_name == "claims_837":
-            silver_table_name = f"healthcare.default.silver_{table_name}_with_quality"
-        else:
-            silver_table_name = f"healthcare.default.silver_{table_name}"
-        
-        try:
-            # Use spark.table() to read from Unity Catalog directly
-            bronze_count = spark.table(bronze_table_name).count()
-            silver_count = spark.table(silver_table_name).count()
-            dropped = bronze_count - silver_count
-            
-            quality_check = spark.createDataFrame([{
-                "table_name": table_name,
-                "bronze_records": bronze_count,
-                "silver_records": silver_count,
-                "dropped_records": dropped,
-                "quality_score_pct": round((silver_count / bronze_count * 100) if bronze_count > 0 else 100, 2),
-                "check_timestamp": datetime.now()
-            }])
-            
-            quality_checks.append(quality_check)
-        except Exception as e:
-            print(f"⚠️ Could not check quality for {table_name}: {e}")
-            continue
+    # Get counts
+    bronze_count = bronze_claims.count()
+    silver_count = silver_claims_quality.count()
+    dropped = bronze_count - silver_count
     
-    if not quality_checks:
-        # Return empty DataFrame with proper schema
-        return spark.createDataFrame([], "table_name string, bronze_records long, silver_records long, dropped_records long, quality_score_pct double, check_timestamp timestamp, severity string, alert_message string")
+    quality_check = spark.createDataFrame([{
+        "table_name": "claims_837",
+        "bronze_records": bronze_count,
+        "silver_records": silver_count,
+        "dropped_records": dropped,
+        "quality_score_pct": round((silver_count / bronze_count * 100) if bronze_count > 0 else 100, 2),
+        "check_timestamp": datetime.now()
+    }])
     
-    all_checks = quality_checks[0]
-    for check in quality_checks[1:]:
-        all_checks = all_checks.unionAll(check)
+    all_checks = quality_check
     
     monitored = all_checks.withColumn(
         "severity",
