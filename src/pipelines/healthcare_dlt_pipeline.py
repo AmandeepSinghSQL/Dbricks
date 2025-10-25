@@ -623,17 +623,21 @@ def monitoring_data_quality():
     bronze_claims = dlt.read("bronze_claims_837")
     silver_claims_quality = dlt.read("silver_claims_837_with_quality")
     
-    # Get counts
+    # Get counts as Python ints
     bronze_count = bronze_claims.count()
     silver_count = silver_claims_quality.count()
     dropped = bronze_count - silver_count
     
+    # Calculate quality score as Python float
+    quality_score = round((silver_count / bronze_count * 100) if bronze_count > 0 else 100.0, 2)
+    
+    # Create DataFrame with Python values (not PySpark operations)
     quality_check = spark.createDataFrame([{
         "table_name": "claims_837",
-        "bronze_records": bronze_count,
-        "silver_records": silver_count,
-        "dropped_records": dropped,
-        "quality_score_pct": round((silver_count / bronze_count * 100) if bronze_count > 0 else 100, 2),
+        "bronze_records": int(bronze_count),
+        "silver_records": int(silver_count),
+        "dropped_records": int(dropped),
+        "quality_score_pct": float(quality_score),
         "check_timestamp": datetime.now()
     }])
     
