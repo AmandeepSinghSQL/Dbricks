@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Generate Bad Healthcare Data for Quality Testing
-# MAGIC 
+# MAGIC
 # MAGIC Creates files with intentional quality issues (NULLs, invalid formats) to test data quality monitoring
 
 # COMMAND ----------
