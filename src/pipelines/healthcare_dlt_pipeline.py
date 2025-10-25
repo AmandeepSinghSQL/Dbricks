@@ -115,8 +115,8 @@ def create_silver_table(table_name, required_columns, key_columns, phi_columns):
     # NO filtering here - let bad data flow through
     # This allows expectations on enriched tables to show drops in DLT UI
     
-    # Deduplication
-    if key_columns:
+    # Deduplication - skip for claims_837 to preserve bad records for demo
+    if key_columns and table_name != "claims_837":
         df = df.dropDuplicates(key_columns)
     
     # PHI Masking - create masked versions and drop originals
