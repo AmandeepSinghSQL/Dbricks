@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PII Incident Response & Prevention</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: white;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .slide {
+            background: white;
+            border-radius: 15px;
+            border: 3px solid #355E3B;
+            box-shadow: 0 5px 20px rgba(53, 94, 59, 0.2);
+            margin: 30px 0;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #355E3B;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 4px solid #4F7942;
+            padding-bottom: 15px;
+        }
+
+        h2 {
+            color: #4F7942;
+            font-size: 1.8em;
+            margin: 30px 0 20px 0;
+            border-left: 5px solid #4F7942;
+            padding-left: 15px;
+        }
+
+        h3 {
+            color: #333;
+            font-size: 1.4em;
+            margin: 20px 0 10px 0;
+        }
+
+        /* Section Headers */
+        .section-number {
+            background: linear-gradient(135deg, #4F7942 0%, #355E3B 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        /* Leak Reasons */
+        .leak-reasons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .leak-card {
+            background: white;
+            color: #333;
+            padding: 25px;
+            border-radius: 15px;
+            border: 3px solid #355E3B;
+            box-shadow: 0 5px 15px rgba(53, 94, 59, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .leak-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .leak-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+        }
+
+        .leak-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #355E3B;
+        }
+
+        .leak-description {
+            font-size: 0.95em;
+            color: #333;
+        }
+
+        /* Architecture Diagram */
+        .architecture-box {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            border: 3px solid #4ecdc4;
+        }
+
+        .architecture-layers {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+
+        .arch-layer {
+            flex: 1;
+            min-width: 250px;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .arch-layer.bronze {
+            background: linear-gradient(135deg, #8B4513 0%, #CD853F 100%);
+            color: white;
+        }
+
+        .arch-layer.silver {
+            background: linear-gradient(135deg, #C0C0C0 0%, #E5E5E5 100%);
+            color: #333;
+        }
+
+        .arch-layer.gold {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #333;
+        }
+
+        .layer-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .layer-name {
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .layer-access {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid rgba(255,255,255,0.3);
+        }
+
+        /* Query Box */
+        .query-box {
+            background: #f8f9fa;
+            color: #333;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            border-left: 5px solid #4F7942;
+            border: 2px solid #355E3B;
+        }
+
+        .query-title {
+            color: #355E3B;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: bold;
+        }
+
+        .query-comment {
+            color: #4F7942;
+            font-style: italic;
+        }
+
+        /* Immediate Steps */
+        .immediate-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .step-box {
+            background: white;
+            color: #333;
+            padding: 25px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            border-left: 8px solid #4F7942;
+        }
+
+        .step-number {
+            background: #4F7942;
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8em;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #355E3B;
+        }
+
+        .step-description {
+            font-size: 0.95em;
+            color: #333;
+        }
+
+        /* Prevention Boxes */
+        .prevention-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+
+        .prevention-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid #4F7942;
+        }
+
+        .prevention-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            color: #4F7942;
+        }
+
+        .prevention-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #355E3B;
+            margin-bottom: 10px;
+        }
+
+        .prevention-description {
+            color: #6c757d;
+            margin-bottom: 15px;
+        }
+
+        .prevention-actions {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .prevention-actions ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .prevention-actions li {
+            padding: 5px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .prevention-actions li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #4F7942;
+            font-weight: bold;
+        }
+
+        /* Long-term Solution */
+        .longterm-box {
+            background: linear-gradient(135deg, #4F7942 0%, #355E3B 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+
+        .longterm-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .longterm-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .longterm-item {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .longterm-item h4 {
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .longterm-item p {
+            font-size: 0.95em;
+            opacity: 0.9;
+        }
+
+        /* Alert Boxes */
+        .alert-box {
+            background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+            color: #355E3B;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 30px 0;
+            border-left: 8px solid #4F7942;
+        }
+
+        .alert-box h3 {
+            color: #355E3B;
+            margin-bottom: 10px;
+        }
+
+        .success-box {
+            background: linear-gradient(135deg, #4F7942 0%, #355E3B 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .success-box h3 {
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        /* Results Table */
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .results-table th {
+            background: linear-gradient(135deg, #4F7942 0%, #355E3B 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+        }
+
+        .results-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .results-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .leak-reasons,
+            .prevention-grid,
+            .architecture-layers,
+            .longterm-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Main Slide -->
+        <div class="slide">
+            <h1>🚨 PII Incident Response & Prevention</h1>
+            <p style="text-align: center; font-size: 1.2em; color: #6c757d; margin-top: 10px;">
+                Scenario: A user accidentally accessed PII data they shouldn't have
+            </p>
+
+            <!-- SECTION 1: REASONS FOR PII LEAK -->
+            <div class="section-number">SECTION 1: Reasons for PII Leak</div>
+            <h2>How Could This Happen?</h2>
+            
+            <div class="leak-reasons">
+                <div class="leak-card">
+                    <div class="leak-icon">📊</div>
+                    <div class="leak-title">1. Schema Drift (Without Rescue Mode)</div>
+                    <div class="leak-description">
+                        New PHI field added by source system. Without rescue mode, Auto Loader's default "addNewColumns" auto-ingests to Bronze unmasked with no alert. Sits undetected for weeks.
+                    </div>
+                </div>
+
+                <div class="leak-card">
+                    <div class="leak-icon">🔓</div>
+                    <div class="leak-title">2. Incorrect RBAC</div>
+                    <div class="leak-description">
+                        Bronze table granted to broad groups (50+ users). No Unity Catalog access controls configured. Relying on "trust" instead of technical controls.
+                    </div>
+                </div>
+
+                <div class="leak-card">
+                    <div class="leak-icon">🎭</div>
+                    <div class="leak-title">3. No Column Masking</div>
+                    <div class="leak-description">
+                        PHI flows to Silver unmasked. Analysts granted Silver access for "joins". Result: 20+ analysts see raw patient_id, provider_id.
+                    </div>
+                </div>
+
+                <div class="leak-card">
+                    <div class="leak-icon">👁️</div>
+                    <div class="leak-title">4. Materialized View Exposure</div>
+                    <div class="leak-description">
+                        Admin creates materialized view from Bronze with raw PHI. Grants access to analysts. Users query the copy, bypassing Bronze permissions.
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert-box">
+                <h3>⚠️ The Common Thread</h3>
+                <p>All four scenarios share the same root cause: <strong>Reactive security posture</strong> instead of <strong>proactive prevention</strong>. We discover issues during audits (months later) rather than preventing them at ingestion (minutes).</p>
+            </div>
+
+            <!-- SECTION 2: IDEAL ARCHITECTURE -->
+            <div class="section-number">SECTION 2: Ideal Architecture (What Should Exist)</div>
+            <h2>Secure Data Access Model</h2>
+            
+            <div class="architecture-box">
+                <h3 style="text-align: center; color: #355E3B; margin-bottom: 25px;">Three-Zone Access Control</h3>
+                
+                <div class="architecture-layers">
+                    <div class="arch-layer bronze">
+                        <div class="layer-icon">🔴</div>
+                        <div class="layer-name">RED ZONE</div>
+                        <div style="font-size: 1.1em; margin-bottom: 10px;">Bronze Layer</div>
+                        <div style="font-size: 0.9em;">Raw PHI (Unmasked)</div>
+                        
+                        <div class="layer-access">
+                            <strong>Access:</strong><br>
+                            ✅ Compliance Team (5)<br>
+                            ✅ DE Leads (3)<br>
+                            ❌ All Others DENIED
+                        </div>
+                        
+                        <div style="margin-top: 15px; font-size: 0.9em;">
+                            <strong>Requirements:</strong><br>
+                            MFA, VPN, VP Sign-off
+                        </div>
+                    </div>
+
+                    <div class="arch-layer silver">
+                        <div class="layer-icon">🟡</div>
+                        <div class="layer-name">YELLOW ZONE</div>
+                        <div style="font-size: 1.1em; margin-bottom: 10px;">Silver Layer</div>
+                        <div style="font-size: 0.9em;">Masked PHI (SHA256)</div>
+                        
+                        <div class="layer-access">
+                            <strong>Access:</strong><br>
+                            ✅ Senior Analysts (15)<br>
+                            ✅ Data Scientists (10)<br>
+                            ❌ Junior Analysts DENIED
+                        </div>
+                        
+                        <div style="margin-top: 15px; font-size: 0.9em;">
+                            <strong>Requirements:</strong><br>
+                            Manager Approval, Training
+                        </div>
+                    </div>
+
+                    <div class="arch-layer gold">
+                        <div class="layer-icon">🟢</div>
+                        <div class="layer-name">GREEN ZONE</div>
+                        <div style="font-size: 1.1em; margin-bottom: 10px;">Gold Layer</div>
+                        <div style="font-size: 0.9em;">Fully Anonymized</div>
+                        
+                        <div class="layer-access">
+                            <strong>Access:</strong><br>
+                            ✅ All Analysts (100+)<br>
+                            ✅ BI Tools<br>
+                            ✅ Self-Service
+                        </div>
+                        
+                        <div style="margin-top: 15px; font-size: 0.9em;">
+                            <strong>Requirements:</strong><br>
+                            None - Open Access
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 20px; text-align: center;">
+                    <strong style="color: #355E3B;">Key Principle:</strong> As PHI risk decreases (Bronze → Gold), access permissions expand. This is <strong>principle of least privilege</strong> in action.
+                </div>
+            </div>
+
+            <!-- SECTION 3: INVESTIGATION (AUDIT LOGS) -->
+            <div class="section-number">SECTION 3: Investigation - Accessing Audit Logs</div>
+            <h2>Step 1: Query Unity Catalog Audit Logs</h2>
+
+            <div class="query-box">
+                <div class="query-title">🔍 Identify Unauthorized Access</div>
+                <pre style="margin: 0; line-height: 1.8;">
+<span class="query-comment">-- Query system.access.audit to find who accessed Bronze</span>
+SELECT 
+    event_time,
+    user_identity.email AS user_email,
+    request_params.full_name_arg AS table_accessed,
+    action_name,
+    request_params.command_text AS query_executed,
+    request_params.operation_result AS result
+FROM system.access.audit
+WHERE event_date >= current_date() - INTERVAL 7 DAYS
+  AND request_params.full_name_arg LIKE '%bronze%'
+  AND user_identity.email NOT IN (
+      <span class="query-comment">-- Authorized Bronze users</span>
+      'compliance-lead@company.com',
+      'compliance-analyst@company.com',
+      'de-lead@company.com'
+  )
+ORDER BY event_time DESC
+LIMIT 100;</pre>
+            </div>
+
+            <h3>Example Results: Unauthorized Access Detected</h3>
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Event Time</th>
+                        <th>User Email</th>
+                        <th>Table Accessed</th>
+                        <th>Action</th>
+                        <th>Query Executed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="highlight">
+                        <td>2024-10-25 10:32:15</td>
+                        <td>analyst@company.com</td>
+                        <td>healthcare.bronze.claims_837</td>
+                        <td>SELECT</td>
+                        <td>SELECT * FROM bronze.claims_837 LIMIT 100</td>
+                    </tr>
+                    <tr>
+                        <td>2024-10-25 09:15:42</td>
+                        <td>compliance-lead@company.com</td>
+                        <td>healthcare.bronze.claims_837</td>
+                        <td>SELECT</td>
+                        <td>SELECT COUNT(*) FROM bronze.claims_837</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="query-box">
+                <div class="query-title">🔍 Determine Scope of Exposure</div>
+                <pre style="margin: 0; line-height: 1.8;">
+<span class="query-comment">-- Check which columns were accessed</span>
+SELECT 
+    user_identity.email,
+    request_params.command_text,
+    <span class="query-comment">-- Count how many queries they ran</span>
+    COUNT(*) as query_count,
+    MIN(event_time) as first_access,
+    MAX(event_time) as last_access
+FROM system.access.audit
+WHERE user_identity.email = 'analyst@company.com'
+  AND request_params.full_name_arg LIKE '%bronze%'
+  AND event_date >= current_date() - INTERVAL 30 DAYS
+GROUP BY user_identity.email, request_params.command_text
+ORDER BY first_access DESC;</pre>
+            </div>
+
+            <h3>Investigation Summary</h3>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #4a90e2;">
+                <p><strong>WHO:</strong> analyst@company.com (junior analyst)</p>
+                <p><strong>WHAT:</strong> SELECT * FROM healthcare.bronze.claims_837 LIMIT 100</p>
+                <p><strong>WHEN:</strong> 2024-10-25 at 10:32:15 AM</p>
+                <p><strong>HOW MUCH:</strong> 100 records with raw PHI (patient_id, provider_id)</p>
+                <p><strong>WHY:</strong> User is member of 'data_analysts' group which has Bronze access (misconfigured RBAC)</p>
+            </div>
+
+            <!-- SECTION 4: IMMEDIATE STEPS -->
+            <div class="section-number">SECTION 4: Immediate Steps (Within 1 Hour)</div>
+            <h2>Containment Actions</h2>
+
+            <div class="immediate-steps">
+                <div class="step-box">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">Revoke Access Immediately</div>
+                        <div class="step-description">
+                            Remove Bronze access from 'data_analysts' group. User loses access within seconds.
+                        </div>
+                        <div class="query-box" style="margin-top: 15px; background: rgba(0,0,0,0.2);">
+REVOKE SELECT ON SCHEMA healthcare.bronze 
+    FROM `data_analysts`;
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">Notify User & Manager</div>
+                        <div class="step-description">
+                            Email user and their manager about PHI access incident. Request deletion of any saved queries, notebooks, or CSV exports.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">Document Incident</div>
+                        <div class="step-description">
+                            Create compliance incident record with timeline, scope, and containment actions taken.
+                        </div>
+                        <div class="query-box" style="margin-top: 15px; background: rgba(0,0,0,0.2);">
+INSERT INTO healthcare.compliance.incident_log VALUES (
+    current_timestamp(),
+    'analyst@company.com',
+    'healthcare.bronze.claims_837',
+    'Unauthorized access to raw PHI - 100 records',
+    'High',
+    'Contained - Access revoked, user notified'
+);
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">Review All Group Memberships</div>
+                        <div class="step-description">
+                            Query Azure AD to verify no other junior analysts have Bronze access via other groups.
+                        </div>
+                        <div class="query-box" style="margin-top: 15px; background: rgba(0,0,0,0.2);">
+SHOW GRANTS ON SCHEMA healthcare.bronze;
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 5: PREVENTION & DELETION -->
+            <div class="section-number">SECTION 5: Prevention & Data Deletion in Databricks</div>
+            <h2>Fix Root Causes & Clean Up</h2>
+
+            <div class="prevention-grid">
+                <div class="prevention-card">
+                    <div class="prevention-icon">🛡️</div>
+                    <div class="prevention-title">1. Harden RBAC</div>
+                    <div class="prevention-description">
+                        Restrict Bronze access to 5-8 authorized users only. Remove broad group permissions.
+                    </div>
+                    <div class="prevention-actions">
+                        <strong>Actions:</strong>
+                        <ul>
+                            <li>Audit all Bronze table GRANTs</li>
+                            <li>Remove 'data_analysts' group</li>
+                            <li>Only grant to 'compliance-team'</li>
+                            <li>Implement quarterly access reviews</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="prevention-card">
+                    <div class="prevention-icon">🔐</div>
+                    <div class="prevention-title">2. Implement Column Masking</div>
+                    <div class="prevention-description">
+                        Create masked views for analysts who need Silver access for joins.
+                    </div>
+                    <div class="prevention-actions">
+                        <strong>Actions:</strong>
+                        <ul>
+                            <li>Apply SHA256 masking at Silver layer</li>
+                            <li>Create dynamic masking views</li>
+                            <li>Grant analysts access to views only</li>
+                            <li>Test: Users see hashed PHI, not raw</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="prevention-card">
+                    <div class="prevention-icon">📊</div>
+                    <div class="prevention-title">3. Rescue Mode Schema Control</div>
+                    <div class="prevention-description">
+                        Use Auto Loader's "rescue" mode to quarantine new columns in _rescued_data instead of auto-adding them.
+                    </div>
+                    <div class="prevention-actions">
+                        <strong>Actions:</strong>
+                        <ul>
+                            <li>Set cloudFiles.schemaEvolutionMode = "rescue"</li>
+                            <li>Monitor _rescued_data column for non-null values</li>
+                            <li>Alert on schema drift within 15 min</li>
+                            <li>Review new fields before adding to schema</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="prevention-card">
+                    <div class="prevention-icon">🚨</div>
+                    <div class="prevention-title">4. Real-Time Monitoring</div>
+                    <div class="prevention-description">
+                        Alert on any Bronze access by non-compliance users immediately.
+                    </div>
+                    <div class="prevention-actions">
+                        <strong>Actions:</strong>
+                        <ul>
+                            <li>Query system.access.audit every 15 min</li>
+                            <li>Flag unauthorized Bronze access</li>
+                            <li>Send alert to security team</li>
+                            <li>Automatic incident ticket creation</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Data Deletion in Databricks (If Required)</h3>
+            <div class="query-box">
+                <div class="query-title">🗑️ Delete Exposed Records from All Layers</div>
+                <pre style="margin: 0; line-height: 1.8;">
+<span class="query-comment">-- Step 1: Soft delete (immediate) - Mark as REDACTED</span>
+UPDATE healthcare.bronze.claims_837
+SET 
+    patient_id = 'REDACTED',
+    provider_id = 'REDACTED',
+    _deletion_timestamp = current_timestamp(),
+    _deletion_reason = 'Unauthorized access incident'
+WHERE claim_id IN (
+    <span class="query-comment">-- IDs accessed by unauthorized user</span>
+    SELECT DISTINCT claim_id FROM exposed_records_log
+);
+
+<span class="query-comment">-- Step 2: Delete from Silver (masked data)</span>
+DELETE FROM healthcare.silver.claims_837
+WHERE claim_id IN (SELECT claim_id FROM exposed_records_log);
+
+<span class="query-comment">-- Step 3: Re-aggregate Gold (automatically updates)</span>
+REFRESH MATERIALIZED VIEW healthcare.gold.provider_performance;
+
+<span class="query-comment">-- Step 4: Hard delete after 30 days (physically remove from Delta)</span>
+VACUUM healthcare.bronze.claims_837 RETAIN 30 HOURS;
+VACUUM healthcare.silver.claims_837 RETAIN 30 HOURS;</pre>
+            </div>
+
+            <div class="alert-box">
+                <h3>⚠️ Delta Time Travel Consideration</h3>
+                <p><strong>Important:</strong> Even after DELETE, historical versions exist in Delta Lake. VACUUM physically removes them, but you lose time-travel capability. Balance compliance requirements (immediate deletion) with audit requirements (retain history for 30 days).</p>
+            </div>
+
+            <!-- SECTION 6: LONG-TERM SOLUTION -->
+            <div class="section-number">SECTION 6: Long-Term Solution (Architecture Changes)</div>
+            <h2>Proactive Prevention Architecture</h2>
+
+            <div class="longterm-box">
+                <div class="longterm-title">🎯 Enterprise-Grade Security Model</div>
+                
+                <div class="longterm-grid">
+                    <div class="longterm-item">
+                        <h4>🔐 Unity Catalog RBAC</h4>
+                        <p>Integrate with Azure AD via SCIM. Groups managed in Azure AD automatically sync to Databricks. Single source of truth for access control.</p>
+                    </div>
+
+                    <div class="longterm-item">
+                        <h4>🛡️ Rescue Mode Schema Control</h4>
+                        <p>Auto Loader configured with "rescue" mode. New PHI fields automatically quarantined in _rescued_data with 15-minute alerts. Zero-config schema drift protection.</p>
+                    </div>
+
+                    <div class="longterm-item">
+                        <h4>🎭 Dynamic Masking</h4>
+                        <p>Unity Catalog column-level masking. Analysts see masked PHI automatically based on group membership. No separate views needed.</p>
+                    </div>
+
+                    <div class="longterm-item">
+                        <h4>📊 Real-Time Monitoring</h4>
+                        <p>Automated queries of system.access.audit every 15 minutes. Alerts fire immediately on unauthorized access. 1-hour incident response SLA.</p>
+                    </div>
+
+                    <div class="longterm-item">
+                        <h4>🔍 Quarterly Access Reviews</h4>
+                        <p>Automated report of all Bronze access grants. Manager approval required for any changes. Stale permissions auto-expire after 90 days.</p>
+                    </div>
+
+                    <div class="longterm-item">
+                        <h4>📝 Compliance Automation</h4>
+                        <p>Automatic incident logging, deletion tracking, and audit certificate generation. HIPAA-ready reporting with complete lineage.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUCCESS SUMMARY -->
+            <div class="success-box">
+                <h3>✅ Complete Incident Response & Prevention</h3>
+                <p><strong>Detection:</strong> 15 minutes (automated alerts) • <strong>Containment:</strong> 1 hour (revoke, notify, document) • <strong>Prevention:</strong> 24 hours (RBAC hardening, masking, monitoring) • <strong>Long-term:</strong> 8 weeks (full architecture implementation) • <strong>Audit Exposure:</strong> Reduced from months to hours</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

@@ -70,7 +70,7 @@ def create_bronze_table(table_name, domain, source_path, file_pattern, file_form
     # Build the reader configuration
     reader = spark.readStream.format("cloudFiles")
     reader = reader.option("cloudFiles.format", file_format)
-    reader = reader.option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+    reader = reader.option("cloudFiles.schemaEvolutionMode", "rescue")
     reader = reader.option("cloudFiles.schemaLocation", f"/tmp/schemas/{domain}/{table_name}")
     reader = reader.option("cloudFiles.includeExistingFiles", "false")
     reader = reader.option("cloudFiles.validateOptions", "true")
