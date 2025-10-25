@@ -105,19 +105,15 @@ def create_bronze_table(table_name, domain, source_path, file_pattern, file_form
 
 def create_silver_table(table_name, required_columns, key_columns, phi_columns):
     """
-    Create a Silver table dynamically with quality filtering
-    Note: Manual filtering doesn't show in DLT UI expectations tab
-    For visible expectations, use @dlt.expect decorators on static tables
+    Create a Silver table dynamically WITHOUT quality filtering
+    Bad records flow through to Silver so expectations can track them
+    For visible quality metrics, use @dlt.expect decorators on downstream tables
     """
     # Read from Bronze table
     df = dlt.read_stream(f"bronze_{table_name}")
     
-    # Quality check: Filter out records with NULL required columns
-    # This prevents bad data from failing the pipeline
-    if required_columns:
-        for col_name in required_columns:
-            if col_name in df.columns:
-                df = df.filter(col(col_name).isNotNull())
+    # NO filtering here - let bad data flow through
+    # This allows expectations on enriched tables to show drops in DLT UI
     
     # Deduplication
     if key_columns:
@@ -594,16 +590,22 @@ def monitoring_data_quality():
     """
     Monitor data quality by comparing Bronze vs Silver counts.
     Dropped records = Bronze - Silver
+    
+    Note: This uses spark.table() instead of dlt.read() to get actual counts
+    from the Unity Catalog tables.
     """
     metadata_df = get_file_metadata()
     quality_checks = []
     
     for row in metadata_df.collect():
         table_name = row.table_name
+        bronze_table_name = f"healthcare.default.bronze_{table_name}"
+        silver_table_name = f"healthcare.default.silver_{table_name}"
         
         try:
-            bronze_count = dlt.read(f"bronze_{table_name}").count()
-            silver_count = dlt.read(f"silver_{table_name}").count()
+            # Use spark.table() to read from Unity Catalog directly
+            bronze_count = spark.table(bronze_table_name).count()
+            silver_count = spark.table(silver_table_name).count()
             dropped = bronze_count - silver_count
             
             quality_check = spark.createDataFrame([{
@@ -617,11 +619,12 @@ def monitoring_data_quality():
             
             quality_checks.append(quality_check)
         except Exception as e:
-            print(f"Could not check quality for {table_name}: {e}")
+            print(f"⚠️ Could not check quality for {table_name}: {e}")
             continue
     
     if not quality_checks:
-        return spark.createDataFrame([], "table_name string, bronze_records long, silver_records long, dropped_records long, quality_score_pct double, check_timestamp timestamp")
+        # Return empty DataFrame with proper schema
+        return spark.createDataFrame([], "table_name string, bronze_records long, silver_records long, dropped_records long, quality_score_pct double, check_timestamp timestamp, severity string, alert_message string")
     
     all_checks = quality_checks[0]
     for check in quality_checks[1:]:

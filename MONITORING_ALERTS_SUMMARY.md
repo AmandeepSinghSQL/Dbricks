@@ -11,20 +11,20 @@
 
 **File**: `src/pipelines/healthcare_dlt_pipeline.py` (lines 267-269)
 
-#### 2. **Quality Filtering in Metadata-Driven Silver Tables**
-- Updated `create_silver_table()` to filter NULL required_columns
-- Prevents bad data from failing the pipeline
-- Silently drops bad records (Auto Loader marks files as processed)
+#### 2. **No Quality Filtering in Metadata-Driven Silver Tables**
+- Updated `create_silver_table()` to allow bad data to flow through
+- Bad records reach enriched table where expectations drop them visibly
+- This makes dropped records show up in DLT UI expectations tab
 
-**File**: `src/pipelines/healthcare_dlt_pipeline.py` (lines 105-131)
+**File**: `src/pipelines/healthcare_dlt_pipeline.py` (lines 106-128)
 
 #### 3. **monitoring_data_quality Table**
-- Compares Bronze vs Silver record counts
+- Compares Bronze vs Silver record counts using spark.table()
 - Calculates quality_score_pct and severity (INFO/WARNING/CRITICAL)
 - Pre-formatted alert messages for each table
 - Runs as part of DLT pipeline
 
-**File**: `src/pipelines/healthcare_dlt_pipeline.py` (lines 586-642)
+**File**: `src/pipelines/healthcare_dlt_pipeline.py` (lines 585-650)
 
 #### 4. **monitoring_bronze_volumes Table** (Already Existed)
 - Tracks volume anomalies using Z-score analysis
@@ -72,17 +72,19 @@ New files land → Auto Loader ingests → Bronze tables created
                                    Gold tables created
 ```
 
-### Two Types of Quality Enforcement
+### Quality Enforcement Strategy
 
-**1. DLT Expectations (Visible in UI)**
-- Used on: `silver_claims_enriched` (static table)
+**DLT Expectations (Visible in UI)**
+- Used on: `silver_claims_enriched` (enriched table that joins claims + payments)
 - Shows in: DLT Data Quality tab
 - Example: `@dlt.expect_or_drop("valid_claim_id", "claim_id IS NOT NULL")`
+- Bad records from Bronze → Silver flow through, then get dropped at enriched layer
+- Dropped records are counted and visible in DLT UI
 
-**2. Manual Filtering (Not Visible in UI)**
-- Used on: Metadata-driven Silver tables (claims_837, claims_835, hl7_messages)
-- Code: `.filter(col(col_name).isNotNull())`
-- Tracked by: `monitoring_data_quality` table
+**Monitoring Table (Historical Tracking)**
+- `monitoring_data_quality` compares Bronze vs Silver counts
+- Tracks quality trends over time
+- Provides alert messages with severity levels
 
 ---
 
@@ -158,7 +160,7 @@ SELECT COUNT(*) FROM healthcare.default.silver_claims_837;
 > "For the demo, we show DLT expectations on the enriched table where they're highly visible in the UI. For production with 500+ metadata-driven tables, we'd use separate notebooks per table to add specific expectations, or rely on monitoring tables like we built. We kept the existing metadata-driven approach unchanged since it was already working."
 
 ### How Bad Data is Handled
-> "Bad data doesn't fail the pipeline. Silver tables filter NULL required columns, Auto Loader marks those files as processed, and we track dropped records in monitoring_data_quality. This prevents the demo from breaking if bad data arrives."
+> "Bad data flows through Bronze to Silver without filtering. When it reaches the enriched table, DLT expectations drop bad records and display the drops in the Data Quality tab. This makes quality issues highly visible. Auto Loader marks files as processed, and we track overall quality in monitoring_data_quality for trend analysis."
 
 ### Alerting Strategy
 > "Both monitoring tables provide pre-formatted alert messages with severity levels. In production, a separate job would poll these tables every 15 minutes and route alerts—Slack for warnings, email for critical issues. For the demo, we just query the tables to show what alerts would be sent."
