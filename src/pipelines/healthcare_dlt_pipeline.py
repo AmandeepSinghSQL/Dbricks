@@ -16,6 +16,7 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
 import hashlib
+from datetime import datetime
 
 # Import centralized schemas using %run
 %run ../schemas/schemas_config
@@ -104,10 +105,19 @@ def create_bronze_table(table_name, domain, source_path, file_pattern, file_form
 
 def create_silver_table(table_name, required_columns, key_columns, phi_columns):
     """
-    Create a Silver table dynamically
+    Create a Silver table dynamically with quality filtering
+    Note: Manual filtering doesn't show in DLT UI expectations tab
+    For visible expectations, use @dlt.expect decorators on static tables
     """
     # Read from Bronze table
     df = dlt.read_stream(f"bronze_{table_name}")
+    
+    # Quality check: Filter out records with NULL required columns
+    # This prevents bad data from failing the pipeline
+    if required_columns:
+        for col_name in required_columns:
+            if col_name in df.columns:
+                df = df.filter(col(col_name).isNotNull())
     
     # Deduplication
     if key_columns:
@@ -256,7 +266,7 @@ for row in metadata_df.collect():
 
 @dlt.table(
     name="silver_claims_enriched",
-    comment="Enriched claims with payment details - CUSTOM JOIN LOGIC",
+    comment="Enriched claims with payment details - CUSTOM JOIN LOGIC + QUALITY CHECKS",
     table_properties={
         "quality": "silver",
         "contains_phi": "false",
@@ -264,6 +274,9 @@ for row in metadata_df.collect():
         "pipelines.autoOptimize.zOrderCols": "claim_id"
     }
 )
+@dlt.expect_or_drop("valid_claim_id", "claim_id IS NOT NULL")
+@dlt.expect_or_drop("valid_service_date", "service_date IS NOT NULL")
+@dlt.expect_or_drop("valid_billed_amount", "billed_amount IS NOT NULL AND billed_amount > 0")
 def silver_claims_enriched():
     """
     Join claims (837) with payments (835) to show:
@@ -455,223 +468,179 @@ def gold_provider_performance_optimized():
         .withColumn("_gold_timestamp", current_timestamp()) \
         .withColumn("_optimization_applied", lit("salting_broadcast"))
 
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Static DLT Table Definitions (BACKUP - Can be deleted if loop works)
-# MAGIC
-# MAGIC *These are kept as backup in case the loop approach has issues*
-# MAGIC *If the metadata-driven loop above works, DELETE this entire section!*
-
-# COMMAND ----------
-
-
-"""
-# =====================================================
-# CLAIMS 837 (EDI Format) - CSV with | delimiter
-# =====================================================
-
-@dlt.table(
-    name="bronze_claims_837",
-    comment="Raw claims_837 data from payer domain - INDUSTRY STANDARDS",
-    table_properties={
-        "quality": "bronze",
-        "contains_phi": "true",
-        "data_classification": "restricted",
-        "retention_days": "30",
-        "industry_standard": "autoloader_incremental",
-        "schema_evolution": "enabled",
-        "audit_trail": "complete"
-    }
-)
-def bronze_claims_837():
-    return create_bronze_table(
-        "claims_837", "payer", 
-        "abfss://rawdata@ucdatabricksstorage.dfs.core.windows.net/healthcare/payer/claims",
-        "claims_837_*.csv", "csv", "|", 30
-    )
-
-@dlt.table(
-    name="silver_claims_837",
-    comment="Validated claims_837 with masked PHI for analytics - INDUSTRY STANDARDS"
-)
-@dlt.expect_all({
-    "valid_claim_id": "claim_id IS NOT NULL",
-    "valid_member_id_masked": "member_id_masked IS NOT NULL",
-    "valid_provider_id_masked": "provider_id_masked IS NOT NULL",
-    "valid_service_date": "service_date IS NOT NULL",
-    "valid_billed_amount": "billed_amount IS NOT NULL",
-    "valid_paid_amount": "paid_amount IS NOT NULL"
-})
-def silver_claims_837():
-    return create_silver_table(
-        "claims_837", 
-        ["claim_id", "member_id", "provider_id", "service_date", "billed_amount", "paid_amount"],
-        ["claim_id", "member_id", "service_date"],
-        ["member_id", "provider_id", "subscriber_name", "date_of_birth"]
-    )
-
-@dlt.table(
-    name="gold_claims_837_summary",
-    comment="Business metrics for claims_837 - INDUSTRY STANDARDS"
-)
-def gold_claims_837_summary():
-    return create_gold_table("claims_837", ["claim_id"])
-
-# =====================================================
-# CLAIMS 835 (Payment Format) - CSV with | delimiter
-# =====================================================
-
-@dlt.table(
-    name="bronze_claims_835",
-    comment="Raw claims_835 data from payer domain - INDUSTRY STANDARDS",
-    table_properties={
-        "quality": "bronze",
-        "contains_phi": "true",
-        "data_classification": "restricted",
-        "retention_days": "30",
-        "industry_standard": "autoloader_incremental",
-        "schema_evolution": "enabled",
-        "audit_trail": "complete"
-    }
-)
-def bronze_claims_835():
-    return create_bronze_table(
-        "claims_835", "payer",
-        "abfss://rawdata@ucdatabricksstorage.dfs.core.windows.net/healthcare/payer/payments",
-        "claims_835_*.csv", "csv", "|", 30
-    )
-
-@dlt.table(
-    name="silver_claims_835",
-    comment="Validated claims_835 with masked PHI for analytics - INDUSTRY STANDARDS"
-)
-@dlt.expect_all({
-    "valid_payment_id": "payment_id IS NOT NULL",
-    "valid_claim_id": "claim_id IS NOT NULL",
-    "valid_payment_amount": "payment_amount IS NOT NULL",
-    "valid_payment_date": "payment_date IS NOT NULL",
-    "valid_adjustment_reason": "adjustment_reason IS NOT NULL"
-})
-def silver_claims_835():
-    return create_silver_table(
-        "claims_835",
-        ["payment_id", "claim_id", "payment_amount", "payment_date", "adjustment_reason"],
-        ["payment_id", "claim_id"],
-        ["member_id", "provider_id"]
-    )
-
-@dlt.table(
-    name="gold_claims_835_summary",
-    comment="Business metrics for claims_835 - INDUSTRY STANDARDS"
-)
-def gold_claims_835_summary():
-    return create_gold_table("claims_835", ["payment_id"])
-
-# =====================================================
-# HL7 MESSAGES (Clinical Data) - JSON format
-# =====================================================
-
-@dlt.table(
-    name="bronze_hl7_messages",
-    comment="Raw hl7_messages data from clinical domain - INDUSTRY STANDARDS",
-    table_properties={
-        "quality": "bronze",
-        "contains_phi": "true",
-        "data_classification": "restricted",
-        "retention_days": "30",
-        "industry_standard": "autoloader_incremental",
-        "schema_evolution": "enabled",
-        "audit_trail": "complete"
-    }
-)
-def bronze_hl7_messages():
-    return create_bronze_table(
-        "hl7_messages", "clinical",
-        "abfss://rawdata@ucdatabricksstorage.dfs.core.windows.net/healthcare/clinical/hl7",
-        "hl7_*.json", "json", None, 30
-    )
-
-@dlt.table(
-    name="silver_hl7_messages",
-    comment="Validated hl7_messages with masked PHI for analytics - INDUSTRY STANDARDS"
-)
-@dlt.expect_all({
-    "valid_message_id": "message_id IS NOT NULL",
-    "valid_patient_id_masked": "patient_id_masked IS NOT NULL",
-    "valid_message_type": "message_type IS NOT NULL",
-    "valid_message_date": "message_date IS NOT NULL",
-    "valid_facility_id": "facility_id IS NOT NULL"
-})
-def silver_hl7_messages():
-    return create_silver_table(
-        "hl7_messages",
-        ["message_id", "patient_id", "message_type", "message_date", "facility_id"],
-        ["message_id", "patient_id", "message_date"],
-        ["patient_id", "provider_npi", "patient_name", "dob"]
-    )
-
-@dlt.table(
-    name="gold_hl7_messages_summary",
-    comment="Business metrics for hl7_messages - INDUSTRY STANDARDS"
-)
-def gold_hl7_messages_summary():
-    return create_gold_table("hl7_messages", ["message_id"])
-
-  """
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Monitoring & Alerting Functions
+# MAGIC ## Real-Time Bronze Volume Monitoring
+# MAGIC 
+# MAGIC **Monitors volumes immediately after Bronze ingestion and triggers alerts**
+# MAGIC 
+# MAGIC This runs DURING the pipeline, not after. Catches issues early!
 
 # COMMAND ----------
 
-def volume_anomaly_detection():
+@dlt.table(
+    name="monitoring_bronze_volumes",
+    comment="Real-time volume monitoring - triggers alerts immediately after Bronze ingestion"
+)
+def monitoring_bronze_volumes():
     """
-    Detect volume anomalies using Z-score analysis
+    Monitor Bronze table volumes in real-time and detect anomalies.
+    Runs as part of the DLT pipeline, so alerts fire DURING ingestion, not after.
     """
-    print("📊 VOLUME ANOMALY DETECTION")
-    print("=" * 50)
+    from pyspark.sql.window import Window
     
-    # Get all enabled tables from metadata
+    # Union all Bronze tables to get volumes
     metadata_df = get_file_metadata()
+    
+    volumes = []
+    for row in metadata_df.collect():
+        table_name = row.table_name
+        bronze_table = f"bronze_{table_name}"
+        
+        try:
+            # Read from the just-created Bronze table
+            df = dlt.read(bronze_table)
+            
+            # Calculate volume per ingestion batch
+            volume = df.groupBy(
+                lit(table_name).alias("table_name"),
+                date_trunc("hour", col("_ingestion_timestamp")).alias("ingestion_hour")
+            ).agg(
+                count("*").alias("record_count"),
+                min("_ingestion_timestamp").alias("first_record_ts"),
+                max("_ingestion_timestamp").alias("last_record_ts")
+            )
+            
+            volumes.append(volume)
+        except Exception as e:
+            print(f"⚠️ Could not monitor {bronze_table}: {e}")
+            continue
+    
+    if not volumes:
+        # Return empty DataFrame with schema if no tables to monitor
+        return spark.createDataFrame(
+            [],
+            "table_name string, ingestion_hour timestamp, record_count long, first_record_ts timestamp, last_record_ts timestamp"
+        )
+    
+    # Union all volumes
+    all_volumes = volumes[0].unionAll(*volumes[1:]) if len(volumes) > 1 else volumes[0]
+    
+    # Calculate rolling statistics for anomaly detection
+    window_spec = Window.partitionBy("table_name").orderBy("ingestion_hour").rowsBetween(-168, -1)  # Last 7 days (hourly)
+    
+    monitored = all_volumes.withColumn(
+        "avg_volume_7d",
+        avg("record_count").over(window_spec)
+    ).withColumn(
+        "stddev_volume_7d",
+        stddev("record_count").over(window_spec)
+    ).withColumn(
+        "z_score",
+        when(
+            col("stddev_volume_7d") > 0,
+            (col("record_count") - col("avg_volume_7d")) / col("stddev_volume_7d")
+        ).otherwise(0.0)
+    ).withColumn(
+        "is_anomaly",
+        abs(col("z_score")) > 2.0
+    ).withColumn(
+        "anomaly_type",
+        when(col("z_score") > 2.0, "HIGH_VOLUME")
+        .when(col("z_score") < -2.0, "LOW_VOLUME")
+        .otherwise("NORMAL")
+    ).withColumn(
+        "alert_message",
+        when(
+            col("anomaly_type") == "HIGH_VOLUME",
+            concat(
+                lit("⚠️ HIGH VOLUME: "), col("table_name"),
+                lit(" - Current: "), col("record_count").cast("string"),
+                lit(" records ("), round((col("record_count") / col("avg_volume_7d") - 1) * 100, 0).cast("string"), lit("% above normal). "),
+                lit("Processing may take longer. Stakeholders notified proactively.")
+            )
+        ).when(
+            col("anomaly_type") == "LOW_VOLUME",
+            concat(
+                lit("🚨 LOW VOLUME: "), col("table_name"),
+                lit(" - Current: "), col("record_count").cast("string"),
+                lit(" records ("), round((1 - col("record_count") / col("avg_volume_7d")) * 100, 0).cast("string"), lit("% below normal). "),
+                lit("Check upstream data sources immediately!")
+            )
+        ).otherwise(lit(""))
+    ).withColumn(
+        "check_timestamp",
+        current_timestamp()
+    )
+    
+    return monitored
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Quality Monitoring Table
+
+# COMMAND ----------
+
+@dlt.table(
+    name="monitoring_data_quality",
+    comment="Real-time quality monitoring - compares Bronze vs Silver record counts"
+)
+def monitoring_data_quality():
+    """
+    Monitor data quality by comparing Bronze vs Silver counts.
+    Dropped records = Bronze - Silver
+    """
+    metadata_df = get_file_metadata()
+    quality_checks = []
     
     for row in metadata_df.collect():
         table_name = row.table_name
-        domain = row.domain
         
         try:
-            # Get current volume
-            current_volume = spark.sql(f"""
-                SELECT COUNT(*) as record_count
-                FROM healthcare.bronze_{table_name}
-                WHERE _ingestion_timestamp >= current_timestamp() - INTERVAL 1 DAY
-            """).collect()[0].record_count
+            bronze_count = dlt.read(f"bronze_{table_name}").count()
+            silver_count = dlt.read(f"silver_{table_name}").count()
+            dropped = bronze_count - silver_count
             
-            # Calculate Z-score (simplified for demo)
-            z_score = abs(current_volume - 100) / 20  # Assuming normal volume of 100
+            quality_check = spark.createDataFrame([{
+                "table_name": table_name,
+                "bronze_records": bronze_count,
+                "silver_records": silver_count,
+                "dropped_records": dropped,
+                "quality_score_pct": round((silver_count / bronze_count * 100) if bronze_count > 0 else 100, 2),
+                "check_timestamp": datetime.now()
+            }])
             
-            if z_score > 2:  # 2-sigma threshold
-                print(f"🚨 ALERT: {table_name} volume anomaly detected!")
-                print(f"   Current: {current_volume} records")
-                print(f"   Z-score: {z_score:.2f}")
-                print(f"   Action: Check for processing delays")
-            else:
-                print(f"✅ {table_name}: Normal volume ({current_volume} records)")
-                
+            quality_checks.append(quality_check)
         except Exception as e:
-            print(f"❌ Error checking {table_name}: {e}")
-
-def send_alert_email(table_name, message):
-    """
-    Send email alert for volume anomalies
-    """
-    print(f"📧 EMAIL ALERT: {table_name}")
-    print(f"   Subject: Healthcare Data Pipeline Alert")
-    print(f"   Message: {message}")
-    print(f"   Recipients: data-team@oakstreethealth.com")
-    print(f"   Priority: HIGH")
+            print(f"Could not check quality for {table_name}: {e}")
+            continue
+    
+    if not quality_checks:
+        return spark.createDataFrame([], "table_name string, bronze_records long, silver_records long, dropped_records long, quality_score_pct double, check_timestamp timestamp")
+    
+    all_checks = quality_checks[0].unionAll(*quality_checks[1:]) if len(quality_checks) > 1 else quality_checks[0]
+    
+    monitored = all_checks.withColumn(
+        "severity",
+        when(col("quality_score_pct") < 95, "CRITICAL")
+        .when(col("quality_score_pct") < 99, "WARNING")
+        .otherwise("INFO")
+    ).withColumn(
+        "alert_message",
+        concat(
+            when(col("severity") == "CRITICAL", lit("🚨 CRITICAL: "))
+            .when(col("severity") == "WARNING", lit("⚠️ WARNING: "))
+            .otherwise(lit("ℹ️ INFO: ")),
+            col("table_name"),
+            lit(" - Quality: "), col("quality_score_pct").cast("string"), lit("%. "),
+            lit("Dropped "), col("dropped_records").cast("string"), lit(" of "), col("bronze_records").cast("string"), lit(" records.")
+        )
+    )
+    
+    return monitored
 
 # COMMAND ----------
 
@@ -765,3 +734,39 @@ def demo_volume_monitoring():
 # MAGIC - ✅ Zero code changes for new files
 # MAGIC - ✅ Easy enable/disable via SQL UPDATE
 # MAGIC - ✅ Perfect for 10-minute demo
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Demo: Monitoring & Alerts
+# MAGIC 
+# MAGIC ### View Volume Anomalies
+# MAGIC ```sql
+# MAGIC SELECT table_name, record_count, z_score, anomaly_type, alert_message
+# MAGIC FROM healthcare.default.monitoring_bronze_volumes
+# MAGIC WHERE is_anomaly = TRUE
+# MAGIC ORDER BY check_timestamp DESC;
+# MAGIC ```
+# MAGIC 
+# MAGIC ### View Quality Issues
+# MAGIC ```sql
+# MAGIC SELECT table_name, quality_score_pct, dropped_records, severity, alert_message
+# MAGIC FROM healthcare.default.monitoring_data_quality
+# MAGIC WHERE severity IN ('WARNING', 'CRITICAL')
+# MAGIC ORDER BY check_timestamp DESC;
+# MAGIC ```
+# MAGIC 
+# MAGIC ### Combined Alert Dashboard
+# MAGIC ```sql
+# MAGIC SELECT 'VOLUME' as alert_type, table_name, anomaly_type as issue, alert_message, check_timestamp
+# MAGIC FROM healthcare.default.monitoring_bronze_volumes
+# MAGIC WHERE is_anomaly = TRUE
+# MAGIC UNION ALL
+# MAGIC SELECT 'QUALITY' as alert_type, table_name, severity as issue, alert_message, check_timestamp
+# MAGIC FROM healthcare.default.monitoring_data_quality
+# MAGIC WHERE severity IN ('WARNING', 'CRITICAL')
+# MAGIC ORDER BY check_timestamp DESC;
+# MAGIC ```
+# MAGIC 
+# MAGIC ### View DLT Expectations (silver_claims_enriched)
+# MAGIC Check the **Data Quality** tab in DLT UI for expectation metrics on silver_claims_enriched table

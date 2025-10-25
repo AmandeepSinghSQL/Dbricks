@@ -62,17 +62,19 @@ def create_claims_837_data(n_records: int = 1000):
     
     IMPORTANT: Creates SKEWED provider distribution for cost optimization demo
     - 80% of claims go to provider_123 (INTENTIONAL SKEW)
-    - 20% of claims distributed across other providers
+    - 20% of claims distributed across 5 other specific providers for join consistency
     """
     data = []
     skewed_provider = "provider_123"
+    other_providers = ["PROV201", "PROV202", "PROV203", "PROV204", "PROV205"]
     
     for i in range(n_records):
         # 80% of claims go to one provider (SKEW!)
         if i < n_records * 0.8:
             provider_id = skewed_provider
         else:
-            provider_id = f'PROV{random.randint(200, 250)}'
+            # Remaining 20% distributed across 5 specific providers (deterministic)
+            provider_id = other_providers[(i - int(n_records * 0.8)) % len(other_providers)]
         
         data.append({
             'claim_id': f'CLM837_{i+1:06d}',
@@ -89,7 +91,7 @@ def create_claims_837_data(n_records: int = 1000):
     
     print(f"📊 Created {n_records} claims with SKEWED distribution:")
     print(f"   - {int(n_records * 0.8)} claims (80%) → {skewed_provider}")
-    print(f"   - {int(n_records * 0.2)} claims (20%) → Other providers")
+    print(f"   - {int(n_records * 0.2)} claims (20%) → 5 other providers")
     print(f"   This skew will demonstrate cost optimization benefits!")
     
     return pd.DataFrame(data)
@@ -100,20 +102,21 @@ def create_claims_835_data(n_records: int = 800):
     
     IMPORTANT: Matches skewed claims for join demo
     - Creates payments for 80% of claims (800 out of 1000)
-    - Also has skewed provider distribution to match claims_837
+    - Uses same provider distribution as claims_837 for consistent joins
     """
     data = []
     skewed_provider = "provider_123"
+    other_providers = ["PROV201", "PROV202", "PROV203", "PROV204", "PROV205"]
     
     for i in range(n_records):
         # Match claim_id pattern from claims_837 (payments for first 800 claims)
         claim_id = f'CLM837_{i+1:06d}'
         
-        # 80% of payments are for the skewed provider
+        # Match provider distribution from claims_837
         if i < n_records * 0.8:
             provider_id = skewed_provider
         else:
-            provider_id = f'PROV{random.randint(200, 250)}'
+            provider_id = other_providers[(i - int(n_records * 0.8)) % len(other_providers)]
         
         data.append({
             'payment_id': f'PAY835_{i+1:06d}',
@@ -127,6 +130,7 @@ def create_claims_835_data(n_records: int = 800):
     
     print(f"📊 Created {n_records} payments with SKEWED distribution:")
     print(f"   - {int(n_records * 0.8)} payments (80%) → {skewed_provider}")
+    print(f"   - {int(n_records * 0.2)} payments (20%) → 5 other providers")
     print(f"   - Joinable with claims_837 on claim_id")
     
     return pd.DataFrame(data)
