@@ -113,10 +113,10 @@ def create_silver_table(table_name, required_columns, key_columns, phi_columns):
     df = dlt.read_stream(f"bronze_{table_name}")
     
     # NO filtering here - let bad data flow through
-    # This allows expectations on enriched tables to show drops in DLT UI
+    # This allows expectations on downstream tables to show drops in DLT UI
     
-    # Deduplication - skip for claims_837 to preserve bad records for demo
-    if key_columns and table_name != "claims_837":
+    # Deduplication - Spark treats NULL != NULL, so NULL records remain unique
+    if key_columns:
         df = df.dropDuplicates(key_columns)
     
     # PHI Masking - create masked versions and drop originals
@@ -252,6 +252,32 @@ for row in metadata_df.collect():
         return create_silver_table(
             table_name, required_columns, key_columns, phi_columns
         )
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Static Silver Table with Expectations (Demo)
+
+# COMMAND ----------
+
+@dlt.table(
+    name="silver_claims_837_with_quality",
+    comment="Claims with visible quality expectations - FOR DEMO",
+    table_properties={
+        "quality": "silver",
+        "contains_phi": "false",
+        "pipelines.autoOptimize.zOrderCols": "claim_id"
+    }
+)
+@dlt.expect_or_drop("valid_claim_id", "claim_id IS NOT NULL")
+@dlt.expect_or_drop("valid_service_date", "service_date IS NOT NULL")
+@dlt.expect_or_drop("valid_billed_amount", "billed_amount IS NOT NULL AND billed_amount > 0")
+def silver_claims_837_with_quality():
+    """
+    Static definition of silver_claims_837 with visible expectations
+    This shows dropped records in DLT UI for demo purposes
+    """
+    return dlt.read_stream("silver_claims_837")
 
 # COMMAND ----------
 
@@ -600,7 +626,12 @@ def monitoring_data_quality():
     for row in metadata_df.collect():
         table_name = row.table_name
         bronze_table_name = f"healthcare.default.bronze_{table_name}"
-        silver_table_name = f"healthcare.default.silver_{table_name}"
+        
+        # For claims_837, compare to quality table; others use regular silver
+        if table_name == "claims_837":
+            silver_table_name = f"healthcare.default.silver_{table_name}_with_quality"
+        else:
+            silver_table_name = f"healthcare.default.silver_{table_name}"
         
         try:
             # Use spark.table() to read from Unity Catalog directly

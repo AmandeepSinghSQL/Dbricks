@@ -4,12 +4,13 @@
 
 ### What Was Added
 
-#### 1. **DLT Expectations on silver_claims_enriched**
-- Added `@dlt.expect_or_drop()` decorators for visible quality tracking in DLT UI
+#### 1. **DLT Expectations on silver_claims_837_with_quality (NEW!)**
+- Added NEW static Silver table with `@dlt.expect_or_drop()` decorators
 - Validates: claim_id NOT NULL, service_date NOT NULL, billed_amount > 0
-- Dropped records show up in DLT Data Quality tab
+- Reads from silver_claims_837 and applies expectations BEFORE joins
+- Dropped records show up in DLT Data Quality tab (visible metrics!)
 
-**File**: `src/pipelines/healthcare_dlt_pipeline.py` (lines 267-269)
+**File**: `src/pipelines/healthcare_dlt_pipeline.py` (lines 263-280)
 
 #### 2. **No Quality Filtering in Metadata-Driven Silver Tables**
 - Updated `create_silver_table()` to allow bad data to flow through
