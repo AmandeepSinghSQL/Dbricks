@@ -9,8 +9,10 @@
 import pandas as pd
 from datetime import datetime, timedelta
 import random
+import time
 
-random.seed(42)
+# Use timestamp as seed for unique records each run
+random.seed(int(time.time()))
 
 # COMMAND ----------
 
@@ -54,10 +56,12 @@ def create_bad_claims_837_data(n_records: int = 100):
     - 10% have NULL service_date
     - 10% have negative billed_amount
     """
+    # Use timestamp for unique claim IDs each run
+    ts_suffix = int(time.time())
     data = []
     for i in range(n_records):
         data.append({
-            'claim_id': None if i < n_records * 0.2 else f'BAD_CLM_{i+1:06d}',
+            'claim_id': None if i < n_records * 0.2 else f'CLM_{ts_suffix}_{i+1:06d}',
             'member_id': None if 0.2 <= i/n_records < 0.5 else f'MEM{random.randint(100000, 999999)}',
             'provider_id': 'provider_123',
             'service_date': None if i >= n_records * 0.9 else (datetime.now() - timedelta(days=random.randint(1, 30))).strftime('%Y-%m-%d'),
@@ -94,7 +98,7 @@ print("🚨 Creating BAD claims file for quality testing...")
 print("=" * 80)
 
 bad_claims_df = create_bad_claims_837_data(100)
-bad_claims_path = f"{base}/payer/claims/claims_837_BAD_{ts}.csv"
+bad_claims_path = f"{base}/payer/claims/claims_837_{ts}.csv"
 
 _single_file_write(
     spark.createDataFrame(bad_claims_df),

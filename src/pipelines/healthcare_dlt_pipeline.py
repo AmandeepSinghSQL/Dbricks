@@ -485,7 +485,7 @@ def gold_provider_performance_optimized():
         avg(datediff(col("payment_date"), col("service_date"))).alias("avg_payment_days"),
         (sum("payment_amount") / sum("billed_amount") * 100).alias("payment_rate_pct")
     ).orderBy(col("total_claims").desc())
-
+    
     return provider_stats \
         .withColumn("_gold_timestamp", current_timestamp()) \
         .withColumn("_optimization_applied", lit("salting_broadcast"))
@@ -497,7 +497,7 @@ def gold_provider_performance_optimized():
 # MAGIC ## Real-Time Bronze Volume Monitoring
 # MAGIC 
 # MAGIC **Monitors volumes immediately after Bronze ingestion and triggers alerts**
-# MAGIC 
+# MAGIC
 # MAGIC This runs DURING the pipeline, not after. Catches issues early!
 
 # COMMAND ----------
@@ -617,29 +617,32 @@ def monitoring_data_quality():
     Monitor data quality by comparing Bronze vs Silver counts.
     Dropped records = Bronze - Silver
     
-    Uses dlt.read() for automatic dependency management during pipeline execution.
+    Uses PySpark aggregation to calculate counts within the DataFrame.
     """
     # Read claims_837 specifically to show quality drops
     bronze_claims = dlt.read("bronze_claims_837")
     silver_claims_quality = dlt.read("silver_claims_837_with_quality")
     
-    # Get counts as Python ints
-    bronze_count = bronze_claims.count()
-    silver_count = silver_claims_quality.count()
-    dropped = bronze_count - silver_count
+    # Count records using PySpark aggregation
+    bronze_agg = bronze_claims.agg(count(lit(1)).alias("bronze_count"))
+    silver_agg = silver_claims_quality.agg(count(lit(1)).alias("silver_count"))
     
-    # Calculate quality score as Python float
-    quality_score = round((silver_count / bronze_count * 100) if bronze_count > 0 else 100.0, 2)
+    # Cross join to get both counts in one row
+    counts_df = bronze_agg.crossJoin(silver_agg)
     
-    # Create DataFrame with Python values (not PySpark operations)
-    quality_check = spark.createDataFrame([{
-        "table_name": "claims_837",
-        "bronze_records": int(bronze_count),
-        "silver_records": int(silver_count),
-        "dropped_records": int(dropped),
-        "quality_score_pct": float(quality_score),
-        "check_timestamp": datetime.now()
-    }])
+    # Calculate quality metrics using PySpark columns
+    quality_check = counts_df.select(
+        lit("claims_837").alias("table_name"),
+        col("bronze_count").alias("bronze_records"),
+        col("silver_count").alias("silver_records"),
+        (col("bronze_count") - col("silver_count")).alias("dropped_records"),
+        round(
+            when(col("bronze_count") > 0, (col("silver_count") / col("bronze_count") * 100))
+            .otherwise(100.0),
+            2
+        ).alias("quality_score_pct"),
+        current_timestamp().alias("check_timestamp")
+    )
     
     all_checks = quality_check
     
