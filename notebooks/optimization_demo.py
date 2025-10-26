@@ -36,7 +36,6 @@ schema = "default"
 print("🎯 Cost Optimization Demo")
 print("=" * 80)
 print(f"Reading from: {catalog}.{schema}")
-print(f"Cluster: {spark.conf.get('spark.databricks.clusterUsageTags.clusterName')}")
 print("=" * 80)
 
 # COMMAND ----------
@@ -55,7 +54,7 @@ print(f"📊 Payments records: {payments.count():,}")
 
 # Analyze data distribution (verify 80% skew)
 print("\n🔍 Provider distribution in claims:")
-claims.groupBy("provider_id").agg(
+claims.groupBy("provider_id_masked").agg(
     count("*").alias("claim_count"),
     (count("*") * 100.0 / claims.count()).alias("percentage")
 ).orderBy(col("claim_count").desc()).show(10, truncate=False)
@@ -93,7 +92,6 @@ joined_unopt = claims.alias("c").join(
 
 # Aggregate by provider
 result_unopt = joined_unopt.select(
-    col("c.provider_id").alias("provider_id"),
     col("c.provider_id_masked").alias("provider_id_masked"),
     col("c.billed_amount").alias("billed_amount"),
     col("p.payment_amount").alias("payment_amount"),
@@ -168,7 +166,6 @@ joined_opt = claims_salted.alias("c").join(
 
 # Aggregate by provider (same aggregation as unoptimized)
 result_opt = joined_opt.select(
-    col("c.provider_id").alias("provider_id"),
     col("c.provider_id_masked").alias("provider_id_masked"),
     col("c.billed_amount").alias("billed_amount"),
     col("p.payment_amount").alias("payment_amount"),
@@ -289,4 +286,4 @@ print("\n" + "=" * 80)
 # MAGIC 2. ✅ Document metrics in interview prep doc
 # MAGIC 3. ✅ Practice explaining investigation → solution → results flow
 # MAGIC 4. Optional: Add Liquid Clustering to Gold for dashboard query optimization (separate from join performance)
-
+# MAGIC
